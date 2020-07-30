@@ -2,5 +2,6 @@
     "python.pythonPath": "/usr/bin/python3",
     "python.linting.pylintEnabled": true,
     "python.linting.enabled": true,
-    "git.autofetch": false
+    "git.autofetch": false,
+    "python.venvPath" : "~/.virtualenvs"
 }
