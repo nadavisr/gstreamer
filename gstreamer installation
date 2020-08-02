@@ -11,15 +11,19 @@ sudo apt-get install python3.8 python3.8-dev python3-dev
 sudo apt-get install python3-pip python-dev 
 sudo apt-get install python3.8-venv
 
-//python bindings for gstreamer - system provided PyGObject - recommended
+//python bindings for gstreamer - system provided PyGObject 
 sudo apt-get install python3-gi python3-gst-1.0 
 sudo apt-get install libgirepository1.0-dev
 sudo apt-get install libcairo2-dev gir1.2-gstreamer-1.0
 sudo apt-get install python3-gi-cairo
 optional? sudo apt-get install gir1.2-gtk-3.0 
 
+//set python path in .bashrc:
+export PYTHONPATH=$PYTHONPATH:/usr/lib/python3/dist-packages:/usr/local/lib/python3/dist-packages
 
-//Alternatively: Installing from PyPI with pip:
+
+//Alternatively: Installing from PyPI with pip and build gst-python from sources:
+http://lifestyletransfer.com/how-to-install-gstreamer-python-bindings
 sudo apt install libgirepository1.0-dev gcc libcairo2-dev pkg-config python3-dev gir1.2-gtk-3.0 python3-gst-1.0
 pip3 install pycairo
 pip3 install PyGObject
