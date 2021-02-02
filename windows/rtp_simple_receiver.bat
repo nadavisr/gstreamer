@@ -1,0 +1,1 @@
+gst-launch-1.0 udpsrc address=127.0.0.1 port=5000 ! application/x-rtp,clock-rate=90000,payload=96 ! rtph264depay ! avdec_h264 ! videoconvert ! autovideosink
