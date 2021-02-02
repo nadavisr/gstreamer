@@ -1,0 +1,190 @@
+//show debug info 
+GST_DEBUG=INFO gst-launch-1.0 videotestsrc ! autovideosink
+
+//Audio---------------------------------------------------------------------------------------------------------------------------------
+//convert mp3 to flac
+gst-launch-1.0 filesrc location=sample.mp3 ! mpegaudioparse ! mpg123audiodec ! audioconvert ! flacenc ! filesink location=sample.flac
+
+//convert mp3 to vorbis
+gst-launch-1.0 filesrc location=sample.mp3 ! mpegaudioparse ! mpg123audiodec ! audioconvert ! vorbisenc ! oggmux ! filesink location=sample.ogg
+
+//create ogg opus file
+gst-launch-1.0 -v audiotestsrc wave=sine num-buffers=1000 ! audioconvert ! opusenc ! oggmux ! filesink location=./test/gstreamer/sine.ogg
+
+//play ogg opus file
+gst-launch-1.0 filesrc location=sine.ogg ! oggdemux ! opusdec ! audioconvert ! autoaudiosink
+
+//convert mp3 to opus
+gst-launch-1.0 filesrc location=sample.mp3 ! decodebin ! audioconvert ! audioresample ! opusenc ! oggmux ! filesink location=sample1.opus
+//----------------------------------------------------------------------------------------------------------------------------------------
+
+//measure rtp latency - sender
+gst-launch-1.0 videotestsrc ! video/x-raw, framerate=500/1 ! timeoverlay font-desc="Sans 60" !  videoconvert ! x264enc ! video/x-h264 ! tee name=t t. ! queue ! rtph264pay pt=96 ! udpsink host=127.0.0.1 port=5000 sync=true  t. ! queue ! avdec_h264 ! videoconvert ! autovideosink
+
+//measure rtp latency - receiver
+ gst-launch-1.0 udpsrc address=127.0.0.1 port=5000 ! application/x-rtp,clock-rate=90000,payload=96 ! rtph264depay ! avdec_h264 ! videoconvert ! autovideosink
+
+//measure rtp + x264 encode-decode latency - sender
+gst-launch-1.0 videotestsrc pattern=white ! video/x-raw, framerate=500/1, width=1280, height=720 ! timeoverlay font-desc="Sans 60" ! tee name=t \
+t. ! queue ! autovideosink \
+t. ! queue ! x264enc ! video/x-h264 ! rtph264pay pt=96 ! udpsink host=127.0.0.1 port=5000 sync=true
+
+
+//measure x264 encode + avdec_h264 latency
+gst-launch-1.0 videotestsrc pattern=white ! video/x-raw, width=1280, height=720, framerate=100/1 ! timeoverlay font-desc="Sans 60" ! tee name=t \
+t. ! queue ! videoconvert ! autovideosink sync=false \
+t. ! queue ! videoconvert ! x264enc tune=zerolatency ! video/x-h264 ! avdec_h264 ! videoconvert ! autovideosink sync=false
+
+//encode-decode using nvenc/nvdec
+gst-launch-1.0 videotestsrc pattern=white ! video/x-raw, width=1280, height=720, framerate=10/1 ! timeoverlay font-desc="Sans 60" ! nvh264enc ! nvdec ! gldownload ! videoconvert ! autovideosink
+
+//measure nvenc - decode latency
+gst-launch-1.0 videotestsrc ! video/x-raw, width=1280, height=720, framerate=100/1 ! timeoverlay font-desc="Sans 60" ! tee name=t t. ! queue ! nvh264enc ! nvdec ! gldownload ! videoconvert ! autovideosink sync=false t. ! queue ! autovideosink sync=false
+
+//--------------------send and receive image from pipes----------------------------------------------------------------------------
+//make named pipe
+mkfifo /home/nadavi/pipe1
+
+//sender with gdp payload
+gst-launch-1.0 -v -e videotestsrc ! videoconvert ! gdppay ! filesink location=/home/nadavi/pipe1 
+
+//receiver gdp payload
+gst-launch-1.0 -e -v filesrc location=/home/nadavi/pipe1 ! gdpdepay ! videoconvert ! autovideosink
+
+
+//Gstreamer sender raw video with RGB 
+gst-launch-1.0 -v videotestsrc ! video/x-raw, width=320, height=240, framerate=30/1, format=RGB ! timeoverlay font-desc="Sans 60" time-mode=running-time ! filesink location=/home/nadavi/pipe1
+
+//ffmpeg sender for the same parameters using testsrc2
+ffmpeg -f lavfi -i "testsrc2=size=320x240:rate=30" -f rawvideo -pix_fmt rgb24 pipe:1 > /home/nadavi/pipe1
+
+//GStreamer receiver needs both format=RGB in Caps filter and rawvideoparse format=rgb to make it work!!
+gst-launch-1.0 -v filesrc location=/home/nadavi/pipe1 ! queue ! "video/x-raw, width=320, height=240, framerate=30/1, format=RGB" ! rawvideoparse format=rgb framerate=30/1 !  videoconvert ! autovideosink 
+
+//ffplay receiver for the above
+ffplay -f rawvideo -video_size 320x240 -pixel_format rgb24  -framerate 30 -i /home/nadavi/pipe1
+
+//ffmpeg receiver for the above
+ ffmpeg -f rawvideo -s 320x240 -pix_fmt rgb24 -r 30 -i /home/nadavi/pipe1 /home/nadavi/test1.mkv
+
+//GStreamer format I420 == ffmpeg yuv420p
+
+//RTP -------------------------------------------------------------------------------------------------------------------------------------------------------
+//GStreamer rtp raw video
+gst-launch-1.0 videotestsrc ! video/x-raw, width=320, height=240, framerate=30/1, format=I420, depth=8 ! timeoverlay font-desc="Sans 60" time-mode=running-time ! rtpvrawpay pt=96 ! udpsink host=127.0.0.1 port=5000 -v
+
+gst-launch-1.0 udpsrc buffer-size=622080 port=5000 caps="application/x-rtp, media=(string)video, clock-rate=(int)90000, encoding-name=(string)RAW, sampling=YCbCr-4:2:0,depth=(string)8,width=(string)320, height=(string)240,colorimetry=(string)BT601-5, payload=(int)96, framerate=(fraction)30/1" ! rtpvrawdepay ! autovideosink sync=true -v
+
+//rtp with cuda acceleration
+gst-launch-1.0 videotestsrc ! videoconvert ! nvh264enc ! video/x-h264 ! rtph264pay pt=96 ! udpsink host=127.0.0.1 port=5000 sync=true
+gst-launch-1.0 -v udpsrc address=127.0.0.1 port=5000 ! application/x-rtp,clock-rate=90000,payload=96 ! rtph264depay ! h264parse !  nvdec ! gldownload ! videoconvert ! autovideosink
+
+
+ssrc == rtp session number
+
+//rtpbin - synchronize 2 video streams with RTP
+//sender - with single source
+gst-launch-1.0 rtpbin name=rtpbin videotestsrc ! video/x-raw, width=640, height=480, framerate=30/1, format=I420, depth=8 ! timeoverlay font-desc="Sans 60" time-mode=running-time \
+! tee name=t  \
+t. ! queue ! videoconvert ! x264enc tune=zerolatency ! video/x-h264 ! rtph264pay pt=96 ! rtpbin.send_rtp_sink_0 \
+t. ! queue ! videoscale ! video/x-raw, width=320, height=120, framerate=30/1, format=I420 ! rtpvrawpay pt=96 ! rtpbin.send_rtp_sink_1 \
+t. ! queue ! videoconvert ! autovideosink sync=true \
+rtpbin.send_rtp_src_0 ! udpsink host=127.0.0.1 port=50000 sync=true async=false \
+rtpbin.send_rtcp_src_0 ! udpsink host=127.0.0.1 port=50001 sync=false async=false \
+rtpbin.send_rtp_src_1 ! udpsink host=127.0.0.1 port=50002 sync=true async=false \
+rtpbin.send_rtcp_src_1 ! udpsink host=127.0.0.1 port=50003 sync=false async=false
+
+//sender with multiple sources
+gst-launch-1.0 rtpbin name=rtpbin videotestsrc do-timestamp=true ! video/x-raw, width=640, height=480, framerate=30/1, format=I420, depth=8 ! \
+timeoverlay font-desc="Sans 60" time-mode=running-time ! tee name=t \
+t. ! queue ! videoconvert ! x264enc tune=zerolatency ! video/x-h264 ! rtph264pay pt=96 ! rtpbin.send_rtp_sink_0 \
+t. ! queue ! videoconvert ! autovideosink  \
+rtpbin.send_rtp_src_0 ! udpsink host=127.0.0.1 port=50000 sync=true async=false \
+rtpbin.send_rtcp_src_0 ! udpsink host=127.0.0.1 port=50001 sync=false async=false \
+videotestsrc do-timestamp=true pattern=white ! video/x-raw, width=320, height=120, framerate=30/1, format=I420, depth=8 !  \
+timeoverlay font-desc="Sans 60" time-mode=running-time ! queue ! rtpvrawpay pt=96 ! rtpbin.send_rtp_sink_1 \
+rtpbin.send_rtp_src_1 ! udpsink host=127.0.0.1 port=50002 sync=true async=false \
+rtpbin.send_rtcp_src_1 ! udpsink host=127.0.0.1 port=50003 sync=false async=false 
+
+//receiver
+gst-launch-1.0 rtpbin name=rtpbin \
+udpsrc address=127.0.0.1 port=50000 caps="application/x-rtp, media=(string)video, encoding-name=(string)H264, clock-rate=(int)90000" ! rtpbin.recv_rtp_sink_0 \
+udpsrc address=127.0.0.1 port=50001 caps="application/x-rtcp" ! rtpbin.recv_rtcp_sink_0 \
+udpsrc address=127.0.0.1 port=50002 caps="application/x-rtp, media=(string)video, clock-rate=(int)90000, encoding-name=(string)RAW, sampling=YCbCr-4:2:0,depth=(string)8,width=(string)320, height=(string)120,colorimetry=(string)BT601-5, payload=(int)96, framerate=(fraction)30/1" ! rtpbin.recv_rtp_sink_1 \
+udpsrc address=127.0.0.1 port=50003 caps="application/x-rtcp" ! rtpbin.recv_rtcp_sink_1 \
+rtpbin. ! rtph264depay ! queue ! avdec_h264 ! autovideosink sync=true \
+rtpbin. ! rtpvrawdepay ! queue ! autovideosink sync=true 
+
+//doing the same with Nvidia hw acceleration (nvh264enc/nvdec)
+//sender with single source
+gst-launch-1.0 rtpbin name=rtpbin videotestsrc ! video/x-raw, width=320, height=240, framerate=30/1, format=I420, depth=8 ! timeoverlay font-desc="Sans 60" time-mode=running-time \
+! tee name=t  \
+t. ! queue ! videoconvert ! nvh264enc ! video/x-h264 ! rtph264pay pt=96 ! rtpbin.send_rtp_sink_0 \
+t. ! queue ! rtpvrawpay pt=96 ! rtpbin.send_rtp_sink_1 \
+t. ! queue ! videoconvert ! autovideosink sync=true \
+rtpbin.send_rtp_src_0 ! udpsink host=127.0.0.1 port=50000 sync=true async=false \
+rtpbin.send_rtcp_src_0 ! udpsink host=127.0.0.1 port=50001 sync=false async=false \
+rtpbin.send_rtp_src_1 ! udpsink host=127.0.0.1 port=50002 sync=true async=false \
+rtpbin.send_rtcp_src_1 ! udpsink host=127.0.0.1 port=50003 sync=false async=false
+
+//receiver
+gst-launch-1.0 rtpbin name=rtpbin \
+udpsrc address=127.0.0.1 port=50000 caps="application/x-rtp, media=(string)video, encoding-name=(string)H264, clock-rate=(int)90000" ! rtpbin.recv_rtp_sink_0 \
+udpsrc address=127.0.0.1 port=50001 caps="application/x-rtcp" ! rtpbin.recv_rtcp_sink_0 \
+udpsrc address=127.0.0.1 port=50002 caps="application/x-rtp, media=(string)video, clock-rate=(int)90000, encoding-name=(string)RAW, sampling=YCbCr-4:2:0,depth=(string)8,width=(string)320, height=(string)240,colorimetry=(string)BT601-5, payload=(int)96, framerate=(fraction)30/1" ! rtpbin.recv_rtp_sink_1 \
+udpsrc address=127.0.0.1 port=50003 caps="application/x-rtcp" ! rtpbin.recv_rtcp_sink_1 \
+rtpbin. ! queue ! rtph264depay !  h264parse ! nvdec ! gldownload ! videoconvert ! autovideosink sync=true \
+rtpbin. ! queue ! rtpvrawdepay ! autovideosink sync=true
+
+
+//test openGL 
+gst-launch-1.0 gltestsrc ! gldownload ! videoconvert ! autovideosink
+GST_DEBUG=gl*:4 gst-launch-1.0 -v videotestsrc ! glupload ! gleffects_squeeze ! glcolorconvert ! gldownload ! videoconvert ! autovideosink
+
+//play from rtsp server example
+gst-launch-1.0 playbin uri=rtsp://localhost:8554/bars
+
+gst-launch-1.0 rtspsrc location=rtsp://localhost:8554/bars ! decodebin name=d \
+d. ! queue ! autovideosink \
+d. ! queue ! autoaudiosink
+
+gst-launch-1.0 rtspsrc location=rtsp://localhost:8554/bars ! rtph264depay ! h264parse ! avdec_h264 ! autovideosink
+
+//tests shared memory
+gst-launch-1.0 -v videotestsrc ! "video/x-raw, format=YUY2, color-matrix=sdtv, chroma-site=mpeg2, width=(int)320, height=(int)240, framerate=(fraction)30/1" ! shmsink socket-path=/tmp/blah shm-size=2000000 wait-for-connaction=true
+
+//sending raw video from gstreamer process to another process with tcp 
+-----------------------------------------------------------------------
+//transmitter should be tcp client in windows 10 due to bug!
+gst-launch-1.0 -v videotestsrc do-timestamp=true ! video/x-raw, width=320, height=120, framerate=30/1, format=I420, depth=8 ! \
+timeoverlay font-desc="Sans 60" time-mode=running-time ! video/x-raw ! tcpclientsink host=127.0.0.1 port=50000 sync=true 
+
+//demo receiver - can be any app that reads raw video from tcp socket
+gst-launch-1.0 -v tcpserversrc host=127.0.0.1 port=50000 ! video/x-raw, width=320, height=120, framerate=30/1, format=I420, depth=8 ! rawvideoparse ! autovideosink sync=true
+
+--------HLS---------------------------------------------------------------
+//create HLS stream of files to a directory
+gst-launch-1.0 videotestsrc do-timestamp=true !  timeoverlay font-desc="Sans 60" time-mode=running-time ! videoconvert ! \
+x264enc tune=zerolatency ! mpegtsmux ! \
+hlssink playlist-root=http://10.53.132.12:8080 location=/home/nadavi/test/gstreamer/hlstest/segment_%05d.ts target-duration=10 max-files=5
+
+//start web server on the above directory
+cd /home/nadavi/test/gstreamer/hlstest
+python3 -m http.server 8080
+
+//open browser for and get hls stream
+http://10.53.132.12:8080/index.html
+
+//watch files .ts files created in the directory by gstreamer
+watch -n 1 ls -l /home/nadavi/test/gstreamer/hlstest
+
+//watch the playlist file updated by gstreamer
+watch -n 1 cat /home/nadavi/test/gstreamer/hlstest/playlist.m3u8
+
+
+
+//temp
+---------------------------------
+
+
+

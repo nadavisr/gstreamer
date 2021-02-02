@@ -1,0 +1,7 @@
+{
+    "python.pythonPath": "C:\\Users\\nadavi\\AppData\\Local\\Programs\\Python\\Python39\\python.exe",
+    "python.linting.pylintEnabled": true,
+    "python.linting.enabled": true,
+    "git.autofetch": false,
+    //"python.venvPath" : "~/.virtualenvs"
+}
