@@ -2,4 +2,14 @@
 # This .gitignore file was automatically created by Microsoft(R) Visual Studio.
 ################################################################################
 
-/gstreamer-sharp-test/GstreamerTest/.vs/GstreamerTest
+.vs/
+bin/
+obj/
+Debug/
+*.vcxproj.filters
+*.vcxproj.user
+*.ipch
+*.sdf
+*.opensdf
+*.suo
+
